@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aether-ai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=Aether AI
+      - DEBUG=true
+      - DATABASE_URL=sqlite:///./aether_ai.db
+      - JWT_SECRET_KEY=change_this_secret_key_aether_ai_2026_super_secure
+      - LLM_PROVIDER=ollama
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - OLLAMA_MODEL=llama3.2
+      - OPENAI_API_KEY=
+      - MAX_HISTORY_MESSAGES=20
+      - UPLOAD_DIR=../data/uploads
+      - VECTOR_STORE_DIR=../data/vector_store
+    volumes:
+      - ./data:/app/data
+      - ./backend/aether_ai.db:/app/aether_ai.db
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: aether-ai-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
