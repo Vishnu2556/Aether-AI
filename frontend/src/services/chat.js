@@ -33,90 +33,154 @@ export const chatService = {
   },
 
   async getMessages(conversationId) {
-    const res = await api.get(`/conversations/${conversationId}/messages`);
+    const res = await api.get(
+      `/conversations/${conversationId}/messages`
+    );
     return res.data;
   },
 
   async updateMessage(messageId, content) {
-    const res = await api.patch(`/messages/${messageId}`, { content });
+    const res = await api.patch(
+      `/messages/${messageId}`,
+      { content }
+    );
     return res.data;
   },
 
   /**
    * Streams chat response using SSE over Fetch API
    */
-  async streamChat({ message, conversationId, useRag = true, onToken, onDone, onError, onMeta, signal }) {
-    const token = localStorage.getItem('aether_token') || localStorage.getItem('vishnu_token');
+  async streamChat({
+    message,
+    conversationId,
+    useRag = true,
+    onToken,
+    onDone,
+    onError,
+    onMeta,
+    signal,
+  }) {
+    const token =
+      localStorage.getItem('aether_token') ||
+      localStorage.getItem('vishnu_token');
+
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-        body: JSON.stringify({
-          message,
-          conversation_id: conversationId || null,
-          use_rag: useRag,
-        }),
-        signal,
-      });
+      const response = await fetch(
+        'https://aether-ai-1-5o3t.onrender.com/api/chat',
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+
+          body: JSON.stringify({
+            message,
+            conversation_id: conversationId || null,
+            use_rag: useRag,
+          }),
+
+          signal,
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Server returned ${response.status}: ${errorText}`);
+
+        throw new Error(
+          `Server returned ${response.status}: ${errorText}`
+        );
+      }
+
+      if (!response.body) {
+        throw new Error('No response body received from server');
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
+
       let buffer = '';
 
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, {
+          stream: true,
+        });
+
         const lines = buffer.split('\n');
-        // Keep the last partial line in buffer
+
+        // Keep the last incomplete line in the buffer
         buffer = lines.pop() || '';
 
         for (const line of lines) {
           const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            const jsonStr = trimmed.slice(6);
-            try {
-              const data = JSON.parse(jsonStr);
-              if (data.error) {
-                onError && onError(new Error(data.error));
-                return;
+
+          if (!trimmed.startsWith('data: ')) {
+            continue;
+          }
+
+          const jsonStr = trimmed.slice(6);
+
+          try {
+            const data = JSON.parse(jsonStr);
+
+            // Server-side error
+            if (data.error) {
+              if (onError) {
+                onError(new Error(data.error));
               }
 
-              // Initial metadata event
-              if (data.conversation_id && !data.done && onMeta) {
-                onMeta(data);
-              }
-
-              // Token content
-              if (data.content && onToken) {
-                onToken(data.content);
-              }
-
-              // Done event
-              if (data.done) {
-                onDone && onDone(data);
-                return;
-              }
-            } catch (err) {
-              console.warn('Failed to parse SSE JSON chunk:', jsonStr, err);
+              return;
             }
+
+            // Initial metadata event
+            if (
+              data.conversation_id &&
+              !data.done &&
+              onMeta
+            ) {
+              onMeta(data);
+            }
+
+            // Streaming token
+            if (data.content && onToken) {
+              onToken(data.content);
+            }
+
+            // Stream completed
+            if (data.done) {
+              if (onDone) {
+                onDone(data);
+              }
+
+              return;
+            }
+          } catch (err) {
+            console.warn(
+              'Failed to parse SSE JSON chunk:',
+              jsonStr,
+              err
+            );
           }
         }
       }
     } catch (err) {
       if (err.name === 'AbortError') {
-        onDone && onDone({ stopped: true });
+        if (onDone) {
+          onDone({
+            stopped: true,
+          });
+        }
       } else {
-        onError && onError(err);
+        if (onError) {
+          onError(err);
+        }
       }
     }
   },
@@ -124,70 +188,130 @@ export const chatService = {
   /**
    * Regenerates response for a given message
    */
-  async regenerateMessage({ messageId, onToken, onDone, onError, onMeta, signal }) {
-    const token = localStorage.getItem('aether_token') || localStorage.getItem('vishnu_token');
+  async regenerateMessage({
+    messageId,
+    onToken,
+    onDone,
+    onError,
+    onMeta,
+    signal,
+  }) {
+    const token =
+      localStorage.getItem('aether_token') ||
+      localStorage.getItem('vishnu_token');
+
     try {
-      const response = await fetch(`/api/messages/${messageId}/regenerate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-        signal,
-      });
+      const response = await fetch(
+        `https://aether-ai-1-5o3t.onrender.com/api/messages/${messageId}/regenerate`,
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+
+          signal,
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Server returned ${response.status}: ${errorText}`);
+
+        throw new Error(
+          `Server returned ${response.status}: ${errorText}`
+        );
+      }
+
+      if (!response.body) {
+        throw new Error('No response body received from server');
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
+
       let buffer = '';
 
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, {
+          stream: true,
+        });
+
         const lines = buffer.split('\n');
+
+        // Keep the last incomplete line in the buffer
         buffer = lines.pop() || '';
 
         for (const line of lines) {
           const trimmed = line.trim();
-          if (trimmed.startsWith('data: ')) {
-            const jsonStr = trimmed.slice(6);
-            try {
-              const data = JSON.parse(jsonStr);
-              if (data.error) {
-                onError && onError(new Error(data.error));
-                return;
+
+          if (!trimmed.startsWith('data: ')) {
+            continue;
+          }
+
+          const jsonStr = trimmed.slice(6);
+
+          try {
+            const data = JSON.parse(jsonStr);
+
+            // Server-side error
+            if (data.error) {
+              if (onError) {
+                onError(new Error(data.error));
               }
 
-              if (data.conversation_id && !data.done && onMeta) {
-                onMeta(data);
-              }
-
-              if (data.content && onToken) {
-                onToken(data.content);
-              }
-
-              if (data.done) {
-                onDone && onDone(data);
-                return;
-              }
-            } catch (err) {
-              console.warn('Failed to parse SSE JSON chunk:', jsonStr, err);
+              return;
             }
+
+            // Metadata event
+            if (
+              data.conversation_id &&
+              !data.done &&
+              onMeta
+            ) {
+              onMeta(data);
+            }
+
+            // Streaming token
+            if (data.content && onToken) {
+              onToken(data.content);
+            }
+
+            // Stream completed
+            if (data.done) {
+              if (onDone) {
+                onDone(data);
+              }
+
+              return;
+            }
+          } catch (err) {
+            console.warn(
+              'Failed to parse SSE JSON chunk:',
+              jsonStr,
+              err
+            );
           }
         }
       }
     } catch (err) {
       if (err.name === 'AbortError') {
-        onDone && onDone({ stopped: true });
+        if (onDone) {
+          onDone({
+            stopped: true,
+          });
+        }
       } else {
-        onError && onError(err);
+        if (onError) {
+          onError(err);
+        }
       }
     }
-  }
+  },
 };
