@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: 'https://aether-ai-1-5o3t.onrender.com/api',
   headers: {
     'Content-Type': 'application/json',
   },
